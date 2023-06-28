@@ -1,0 +1,83 @@
+import telegram
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+import requests
+import urllib.parse
+import pyshorteners
+
+# Replace 'YOUR_BOT_TOKEN' with your own Telegram Bot token
+TOKEN = 'YOUR_BOT_TOKEN'
+
+# Initialize the Telegram bot
+bot = telegram.Bot(token=TOKEN)
+updater = Updater(token=TOKEN, use_context=True)
+dispatcher = updater.dispatcher
+
+# Command handler for the start command
+def start(update, context):
+    context.bot.send_message(chat_id=update.effective_chat.id,
+                             text="Welcome to the Movie Download Bot! Please enter the name of a movie to search and download.")
+
+# Message handler for movie search and download
+def movie_handler(update, context):
+    movie_name = update.message.text
+    search_results = search_movie(movie_name)
+
+    if search_results:
+        context.user_data['search_results'] = search_results
+        context.bot.send_message(chat_id=update.effective_chat.id,
+                                 text="Search Results:")
+        for i, result in enumerate(search_results, start=1):
+            context.bot.send_message(chat_id=update.effective_chat.id,
+                                     text=f"{i}. {result['title']}")
+        context.bot.send_message(chat_id=update.effective_chat.id,
+                                 text="Please enter the number of the movie you want to download.")
+    else:
+        context.bot.send_message(chat_id=update.effective_chat.id,
+                                 text="No results found for the movie.")
+
+def download_movie(update, context):
+    try:
+        movie_index = int(update.message.text)
+        search_results = context.user_data.get('search_results')
+        if search_results:
+            if movie_index > 0 and movie_index <= len(search_results):
+                movie_name = search_results[movie_index - 1]['title']
+                download_link = search_results[movie_index - 1]['download_link']
+
+                # Shorten the download link
+                shortener = pyshorteners.Shortener()
+                shortened_link = shortener.tinyurl.short(download_link)
+
+                context.bot.send_message(chat_id=update.effective_chat.id,
+                                         text=f"Downloading {movie_name}...\n\nDownload Link: {shortened_link}")
+            else:
+                context.bot.send_message(chat_id=update.effective_chat.id,
+                                         text="Invalid movie selection. Please enter a valid number.")
+        else:
+            context.bot.send_message(chat_id=update.effective_chat.id,
+                                     text="No search results available. Please start a new search.")
+    except ValueError:
+        context.bot.send_message(chat_id=update.effective_chat.id,
+                                 text="Invalid input. Please enter a valid number.")
+
+# Function to search for a movie and return the search results
+def search_movie(movie_name):
+    # Perform search using a movie API or database
+    # Replace the API_URL with the appropriate endpoint for movie search
+    API_URL = f"https://api.example.com/movies/search?query={urllib.parse.quote(movie_name)}"
+    response = requests.get(API_URL)
+
+    if response.status_code == 200:
+        search_results = response.json()
+        return search_results['movies']
+
+    return None
+
+# Register the handlers
+start_handler = CommandHandler('start', start)
+movie_handler = MessageHandler(Filters.text & (~Filters.command), movie_handler)
+download_handler = MessageHandler(Filters.text & (~Filters.command), download_movie)
+
+dispatcher.add_handler(start_handler)
+dispatcher.add_handler(movie_handler)
+dispatcher.add_handler(download_handler)
